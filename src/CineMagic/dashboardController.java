@@ -3,9 +3,13 @@ package CineMagic;
 import com.mysql.jdbc.Statement;
 import java.io.File;
 import java.net.URL;
+import java.sql.Time;
+import java.time.LocalTime;
+import java.util.Date;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Optional;
 import java.util.ResourceBundle;
 import javafx.collections.FXCollections;
@@ -26,6 +30,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.Spinner;
+import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
@@ -126,6 +131,9 @@ public class dashboardController implements Initializable {
     private ImageView availableMovies_imageView;
 
     @FXML
+    private ImageView availableMovies_imageSlideView;
+
+    @FXML
     private Label availableMovies_label;
 
     @FXML
@@ -165,6 +173,18 @@ public class dashboardController implements Initializable {
     private Button customers_clearBtn;
 
     @FXML
+    private TableColumn<customerData, String> customers_col_dateChecked;
+
+    @FXML
+    private TableColumn<customerData, String> customers_col_movieTitle;
+
+    @FXML
+    private TableColumn<customerData, String> customers_col_ticketNumber;
+
+    @FXML
+    private TableColumn<customerData, String> customers_col_timeChecked;
+
+    @FXML
     private Label customers_dateChecked;
 
     @FXML
@@ -178,6 +198,9 @@ public class dashboardController implements Initializable {
 
     @FXML
     private TextField customers_search;
+
+    @FXML
+    private TableView<customerData> customers_tableView;
 
     @FXML
     private Label customers_ticketNumber;
@@ -219,7 +242,7 @@ public class dashboardController implements Initializable {
     private TableColumn<moviesData, String> editScreening_col_movieTitle;
 
     @FXML
-    private ComboBox<?> editScreening_current;
+    private ComboBox<String> editScreening_current;
 
     @FXML
     private AnchorPane editScreening_form;
@@ -264,6 +287,15 @@ public class dashboardController implements Initializable {
     private Statement statement;
     private ResultSet result;
 
+    private SpinnerValueFactory<Integer> spinner1;
+    private SpinnerValueFactory<Integer> spinner2;
+
+    private float price1 = 0;
+    private float price2 = 0;
+    private float total = 0;
+    private int qty1 = 0;
+    private int qty2 = 0;
+
     private int totalMovies;
 
     public void totalAvailableMovies() {
@@ -293,6 +325,379 @@ public class dashboardController implements Initializable {
         totalAvailableMovies();
 
         dashboard_availableMovies.setText(String.valueOf(totalMovies));
+
+    }
+
+    private double totalIncome;
+
+    public void totalIncomeToday() {
+
+        Date date = new Date();
+        java.sql.Date sqlDate = new java.sql.Date(date.getTime());
+
+        String sql = "SELECT SUM(total) FROM customer WHERE date = '" + String.valueOf(sqlDate) + "'";
+
+        connect = Database.connectDB();
+
+        try {
+
+            prepare = connect.prepareStatement(sql);
+            result = prepare.executeQuery();
+
+            if (result.next()) {
+
+                totalIncome = result.getDouble("SUM(total)");
+
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public void displayTotalIncomeToday() {
+        totalIncomeToday();
+
+        dashboard_totalEarnToday.setText(String.valueOf(totalIncome) + "৳");
+
+    }
+
+    private int soldTicket;
+
+    public void countTicket() {
+
+        String sql = "SELECT count(id) FROM customer";
+
+        connect = Database.connectDB();
+
+        try {
+
+            prepare = connect.prepareStatement(sql);
+
+            result = prepare.executeQuery();
+
+            if (result.next()) {
+
+                soldTicket = result.getInt("count(id)");
+
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public void displayTotalSoldTicket() {
+
+        countTicket();
+
+        dashboard_totalSoldTicket.setText(String.valueOf(soldTicket));
+
+    }
+
+    public void searchCustomer() {
+
+        FilteredList<customerData> filter = new FilteredList<>(custList, e -> true);
+
+        customers_search.textProperty().addListener((observable, oldValue, newValue) -> {
+
+            filter.setPredicate(predicateCustomer -> {
+
+                if (newValue.isEmpty() || newValue == null) {
+
+                    return true;
+                }
+
+                String searchKey = newValue.toLowerCase();
+
+                if (predicateCustomer.getId().toString().contains(searchKey)) {
+                    return true;
+                } else if (predicateCustomer.getTitle().toLowerCase().contains(searchKey)) {
+                    return true;
+                } else if (predicateCustomer.getDate().toString().contains(searchKey)) {
+                    return true;
+                } else {
+
+                    return false;
+
+                }
+
+            });
+
+        });
+
+        SortedList<customerData> sort = new SortedList<>(filter);
+        sort.comparatorProperty().bind(customers_tableView.comparatorProperty());
+
+        customers_tableView.setItems(sort);
+
+    }
+
+    public ObservableList<customerData> customerList() {
+        ObservableList<customerData> customerL = FXCollections.observableArrayList();
+
+        String sql = "SELECT * FROM customer";
+
+        connect = Database.connectDB();
+
+        try {
+
+            customerData customerD;
+            prepare = connect.prepareStatement(sql);
+            result = prepare.executeQuery();
+
+            while (result.next()) {
+                customerD = new customerData(result.getInt("id"),
+                        result.getString("type"),
+                        result.getString("movieTitle"),
+                        result.getInt("quantity"),
+                        result.getDouble("total"),
+                        result.getDate("date"),
+                        result.getTime("time"));
+                customerL.add(customerD);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return customerL;
+    }
+
+    private ObservableList<customerData> custList;
+
+    public void showCustomerList() {
+
+        custList = customerList();
+
+        customers_col_ticketNumber.setCellValueFactory(new PropertyValueFactory<>("id"));
+        customers_col_movieTitle.setCellValueFactory(new PropertyValueFactory<>("title"));
+        customers_col_dateChecked.setCellValueFactory(new PropertyValueFactory<>("date"));
+        customers_col_timeChecked.setCellValueFactory(new PropertyValueFactory<>("time"));
+
+        customers_tableView.setItems(custList);
+
+    }
+
+    public void selectCustomerList() {
+
+        customerData custD = customers_tableView.getSelectionModel().getSelectedItem();
+        int num = customers_tableView.getSelectionModel().getSelectedIndex();
+
+        if ((num - 1) < -1) {
+            return;
+        }
+
+        customers_ticketNumber.setText(String.valueOf(custD.getId()));
+        customers_movieTitle.setText(custD.getTitle());
+        customers_dateChecked.setText(String.valueOf(custD.getDate()));
+        customers_timeChecked.setText(String.valueOf(custD.getTime()));
+
+    }
+
+    public void deleteCustomer() {
+
+        String sql = "DELETE FROM customer WHERE id = '" + customers_ticketNumber.getText() + "'";
+        connect = Database.connectDB();
+
+        try {
+
+            Alert alert;
+
+            statement = (Statement) connect.createStatement();
+
+            if (customers_ticketNumber.getText().isEmpty()
+                    || customers_movieTitle.getText().isEmpty()
+                    || customers_dateChecked.getText().isEmpty()
+                    || customers_timeChecked.getText().isEmpty()) {
+
+                alert = new Alert(AlertType.ERROR);
+                alert.setTitle("Error Message");
+                alert.setHeaderText(null);
+                alert.setContentText("Please select the customer first");
+                alert.showAndWait();
+            } else {
+
+                alert = new Alert(AlertType.CONFIRMATION);
+                alert.setTitle("Confirmation Message");
+                alert.setHeaderText(null);
+                alert.setContentText("Are you sure you want to delete " + customers_movieTitle.getText() + "?");
+
+                Optional<ButtonType> option = alert.showAndWait();
+
+                if (option.get() == ButtonType.OK) {
+
+                    statement.executeUpdate(sql);
+
+                    alert = new Alert(AlertType.INFORMATION);
+                    alert.setTitle("Information Message");
+                    alert.setHeaderText(null);
+                    alert.setContentText("Successfully Removed");
+                    alert.showAndWait();
+
+                    showCustomerList();
+                    clearCustomer();
+
+                } else {
+                    return;
+                }
+
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public void clearCustomer() {
+
+        customers_ticketNumber.setText("");
+        customers_movieTitle.setText("");
+        customers_dateChecked.setText("");
+        customers_timeChecked.setText("");
+
+    }
+
+    private int num;
+    private int qty;
+
+    public void buy() {
+
+        String sql = "INSERT INTO customer (type, movieTitle, quantity, total, date, time) VALUES (?, ?, ?, ?, ?, ?)";
+
+        connect = Database.connectDB();
+
+        String type = "";
+        if (price1 > 0 && price2 == 0) {
+
+            type = "Special Class";
+
+        } else if (price2 > 0 && price1 == 0) {
+
+            type = "Normal Class";
+
+        } else if (price2 > 0 && price1 > 0) {
+
+            type = "Special & Normal Class";
+
+        }
+
+        Date date = new Date();
+        java.sql.Date setDate = new java.sql.Date(date.getTime());
+
+        try {
+
+            LocalTime localTime = LocalTime.now();
+
+            Time time = Time.valueOf(localTime);
+
+            qty = qty1 + qty2;
+
+            prepare = connect.prepareStatement(sql);
+            prepare.setString(1, type);
+            prepare.setString(2, availableMovies_title.getText());
+            prepare.setString(3, String.valueOf(qty));
+            prepare.setString(4, String.valueOf(total));
+            prepare.setString(5, String.valueOf(setDate));
+            prepare.setString(6, String.valueOf(time));
+
+            Alert alert;
+
+            if (availableMovies_imageView.getImage() == null || availableMovies_title.getText().isEmpty()) {
+
+                alert = new Alert(AlertType.ERROR);
+                alert.setTitle("Error Message");
+                alert.setHeaderText(null);
+                alert.setContentText("Please select the movie first");
+                alert.showAndWait();
+
+            } else if (price1 == 0 && price2 == 0) {
+
+                alert = new Alert(AlertType.ERROR);
+                alert.setTitle("Error Message");
+                alert.setHeaderText(null);
+                alert.setContentText("Please indicate the quantity of ticket you want to purchase");
+                alert.showAndWait();
+
+            } else {
+
+                prepare.executeUpdate();
+
+                alert = new Alert(AlertType.INFORMATION);
+                alert.setTitle("Information Message");
+                alert.setHeaderText(null);
+                alert.setContentText("Successfully purchased");
+                alert.showAndWait();
+
+                String sql1 = "SELECT * FROM customer";
+                prepare = connect.prepareStatement(sql1);
+                result = prepare.executeQuery();
+
+                int num = 0;
+
+                while (result.next()) {
+                    num = result.getInt("id");
+                }
+
+                String sql2 = "INSERT INTO customer_info (customer_id, type, total, movieTitle) VALUES (?, ?, ?, ?)";
+
+                prepare = connect.prepareStatement(sql2);
+
+                prepare.setString(1, String.valueOf(num));
+                prepare.setString(2, type);
+                prepare.setString(3, String.valueOf(total));
+                prepare.setString(4, availableMovies_title.getText());
+
+                prepare.execute();
+
+                clearPurchaseTicketInfo();
+
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    public void clearPurchaseTicketInfo() {
+        spinner1 = new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 10, 0);
+        spinner2 = new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 10, 0);
+
+        availableMovies_specialClass_quantity.setValueFactory(spinner1);
+        availableMovies_normalClass_quantity.setValueFactory(spinner2);
+
+        availableMovies_specialClass_price.setText("0.0৳");
+        availableMovies_normalClass_price.setText("0.0৳");
+        availableMovies_total.setText("0.0৳");
+
+        availableMovies_imageView.setImage(null);
+        availableMovies_title.setText("");
+    }
+
+    public void showSpinnerValue() {
+        spinner1 = new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 10, 0);
+        spinner2 = new SpinnerValueFactory.IntegerSpinnerValueFactory(0, 10, 0);
+
+        availableMovies_specialClass_quantity.setValueFactory(spinner1);
+        availableMovies_normalClass_quantity.setValueFactory(spinner2);
+    }
+
+    public void getSpinnerValue(MouseEvent event) {
+
+        qty1 = availableMovies_specialClass_quantity.getValue();
+        qty2 = availableMovies_normalClass_quantity.getValue();
+
+        price1 = (qty1 * 500);
+        price2 = (qty2 * 300);
+
+        total = (price1 + price2);
+
+        availableMovies_specialClass_price.setText(String.valueOf(price1) + "৳");
+        availableMovies_normalClass_price.setText(String.valueOf(price2) + "৳");
+
+        availableMovies_total.setText(String.valueOf(total));
 
     }
 
@@ -342,6 +747,151 @@ public class dashboardController implements Initializable {
         availableMovies_col_showingDate.setCellValueFactory(new PropertyValueFactory<>("date"));
         availableMovies_tableView.setItems(availableMoviesList);
 
+    }
+
+    public void selectAvailableMovies() {
+        moviesData movD = availableMovies_tableView.getSelectionModel().getSelectedItem();
+        int num = availableMovies_tableView.getSelectionModel().getSelectedIndex();
+        if ((num - 1) < -1) {
+            return;
+        }
+
+        getData.path = movD.getImage();
+
+        getData.movieId = movD.getId();
+
+        availableMovies_movieTitle.setText(movD.getTitle());
+        availableMovies_genre.setText(movD.getGenre());
+        availableMovies_date.setText(String.valueOf(movD.getDate()));
+
+        getData.path = movD.getImage();
+        getData.title = movD.getTitle();
+
+    }
+
+    public void selectMovie() {
+
+        Alert alert;
+
+        if (availableMovies_movieTitle.getText().isEmpty()
+                || availableMovies_genre.getText().isEmpty()
+                || availableMovies_date.getText().isEmpty()) {
+
+            alert = new Alert(AlertType.ERROR);
+            alert.setTitle("Error Message");
+            alert.setHeaderText(null);
+            alert.setContentText("Please select the movie first");
+            alert.showAndWait();
+
+        } else {
+
+            String uri = "file:" + getData.path;
+
+            image = new Image(uri, 122, 157, false, true);
+            availableMovies_imageView.setImage(image);
+            availableMovies_title.setText(getData.title);
+
+            availableMovies_movieTitle.setText("");
+            availableMovies_genre.setText("");
+            availableMovies_date.setText("");
+
+        }
+
+    }
+
+    private String[] currentList = {"Showing", "End Showing"};
+
+    public void comboBox() {
+        editScreening_current.setItems(FXCollections.observableArrayList(currentList));
+    }
+
+    public void updateEditScreening() {
+        String title = editScreening_title.getText();
+        Image image = editScreening_imageView.getImage();
+        String current = editScreening_current.getValue();
+
+        if (title.isEmpty() || image == null || current == null) {
+            Alert alert = new Alert(AlertType.ERROR);
+            alert.setTitle("Error Message");
+            alert.setHeaderText(null);
+            alert.setContentText("Please select the movie first");
+            alert.showAndWait();
+            return;
+        }
+
+        String sql = "UPDATE movie SET current = ? WHERE movieTitle = ?";
+
+        try (Connection connect = Database.connectDB(); PreparedStatement statement = connect.prepareStatement(sql)) {
+            statement.setString(1, current);
+            statement.setString(2, title);
+            statement.executeUpdate();
+
+            Alert alert = new Alert(AlertType.INFORMATION);
+            alert.setTitle("Information Message");
+            alert.setHeaderText(null);
+            alert.setContentText("Successfully Updated");
+            alert.showAndWait();
+
+            showEditScreening();
+            clearEditScreening();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void clearEditScreening() {
+        editScreening_title.setText("");
+        editScreening_imageView.setImage(null);
+        editScreening_current.getSelectionModel().clearSelection();
+    }
+
+    public void searchEditScreening() {
+        String search = editScreening_search.getText().toLowerCase();
+        FilteredList<moviesData> filteredList = editScreeningL.filtered(movie
+                -> movie.getTitle().toLowerCase().contains(search)
+                || movie.getGenre().toLowerCase().contains(search)
+                || movie.getDuration().toLowerCase().contains(search)
+                || movie.getCurrent().toLowerCase().contains(search)
+        );
+        editScreening_tableView.setItems(filteredList);
+    }
+
+    public void selectEditScreening() {
+        moviesData movD = editScreening_tableView.getSelectionModel().getSelectedItem();
+        if (movD == null) {
+            return;
+        }
+        String uri = "file:" + movD.getImage();
+        Image image = new Image(uri, 111, 159, false, true);
+        editScreening_imageView.setImage(image);
+        editScreening_title.setText(movD.getTitle());
+    }
+
+    public ObservableList<moviesData> editScreeningList() {
+        ObservableList<moviesData> editSList = FXCollections.observableArrayList();
+        String sql = "SELECT * FROM movie";
+        try (Connection connect = Database.connectDB(); PreparedStatement prepare = connect.prepareStatement(sql)) {
+            try (ResultSet result = prepare.executeQuery()) {
+                while (result.next()) {
+                    moviesData movD = new moviesData(result.getInt("id"), result.getString("movieTitle"), result.getString("genre"), result.getString("duration"), result.getString("image"), result.getDate("date"), result.getString("current"));
+                    editSList.add(movD);
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return editSList;
+    }
+
+    private ObservableList<moviesData> editScreeningL;
+
+    public void showEditScreening() {
+        editScreeningL = editScreeningList();
+        editScreening_col_movieTitle.setCellValueFactory(new PropertyValueFactory<>("title"));
+        editScreening_col_genre.setCellValueFactory(new PropertyValueFactory<>("genre"));
+        editScreening_col_duration.setCellValueFactory(new PropertyValueFactory<>("duration"));
+        editScreening_col_current.setCellValueFactory(new PropertyValueFactory<>("current"));
+        editScreening_tableView.setItems(editScreeningL);
     }
 
     public void searchAddMovies() {
@@ -553,6 +1103,51 @@ public class dashboardController implements Initializable {
 
     }
 
+    public void deleteAddMovies() {
+        String sql = "DELETE FROM movie WHERE movieTitle = '" + addMovies_movieTitle.getText() + "'";
+        connect = Database.connectDB();
+
+        try {
+            statement = (Statement) connect.createStatement();
+
+            Alert alert;
+            if (addMovies_movieTitle.getText().isEmpty()
+                    || addMovies_genre.getText().isEmpty()
+                    || addMovies_duration.getText().isEmpty()
+                    || addMovies_imageView.getImage() == null
+                    || addMovies_date.getValue() == null) {
+                alert = new Alert(AlertType.ERROR);
+                alert.setTitle("Error Message");
+                alert.setHeaderText(null);
+                alert.setContentText("Please select the movie first");
+                alert.showAndWait();
+            } else {
+                alert = new Alert(AlertType.CONFIRMATION);
+                alert.setTitle("Confirmation Message");
+                alert.setHeaderText(null);
+                alert.setContentText("Are you sure want to delete " + addMovies_movieTitle.getText() + "?");
+
+                Optional<ButtonType> option = alert.showAndWait();
+                if (ButtonType.OK.equals(option.get())) {
+                    statement.executeUpdate(sql);
+
+                    showAddMoviesList();
+                    clearAddMoviesList();
+
+                    alert = new Alert(AlertType.INFORMATION);
+                    alert.setTitle("Information Message");
+                    alert.setHeaderText(null);
+                    alert.setContentText("Successfully Deleted");
+                    alert.showAndWait();
+                } else {
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public void clearAddMoviesList() {
 
         addMovies_movieTitle.setText("");
@@ -615,13 +1210,11 @@ public class dashboardController implements Initializable {
         }
 
         getData.path = movD.getImage();
-
         getData.movieId = movD.getId();
-
         addMovies_movieTitle.setText(movD.getTitle());
         addMovies_genre.setText(movD.getGenre());
         addMovies_duration.setText(movD.getDuration());
-        String getDate = String.valueOf(movD.getDate());
+        addMovies_date.setValue(movD.getDate().toLocalDate());
 
         String uri = "file:" + movD.getImage();
 
@@ -681,6 +1274,8 @@ public class dashboardController implements Initializable {
             editScreening_btn.setStyle("-fx-background-color:transparent");
             customers_btn.setStyle("-fx-background-color:transparent");
 
+            displayTotalSoldTicket();
+            displayTotalIncomeToday();
             displayTotalAvailableMovies();
 
         } else if (event.getSource() == addMovies_btn) {
@@ -729,6 +1324,8 @@ public class dashboardController implements Initializable {
             editScreening_btn.setStyle("-fx-background-color:#ae2d3c");
             customers_btn.setStyle("-fx-background-color:transparent");
 
+            showEditScreening();
+
         } else if (event.getSource() == customers_btn) {
 
             dashboard_form.setVisible(false);
@@ -742,6 +1339,8 @@ public class dashboardController implements Initializable {
             availableMovies_btn.setStyle("-fx-background-color:transparent");
             editScreening_btn.setStyle("-fx-background-color:transparent");
             customers_btn.setStyle("-fx-background-color:#ae2d3c");
+
+            showCustomerList();
 
         }
 
@@ -769,7 +1368,19 @@ public class dashboardController implements Initializable {
 
         showAddMoviesList();
 
+        showEditScreening();
+
+        comboBox();
+
         showAvailableMovies();
+
+        showSpinnerValue();
+
+        showCustomerList();
+
+        displayTotalSoldTicket();
+
+        displayTotalIncomeToday();
 
         displayTotalAvailableMovies();
     }
