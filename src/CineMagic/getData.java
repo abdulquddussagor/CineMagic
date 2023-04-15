@@ -10,4 +10,10 @@ public class getData {
 
     public static String title;
 
+    public static int ticket;
+
+    public static int avMovies;
+
+    public static double total;
+
 }
